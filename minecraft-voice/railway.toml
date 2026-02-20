@@ -1,0 +1,11 @@
+[build]
+# Говорим Railway использовать стандартный сборщик
+builder = "NIXPACKS"
+# Команда для установки всех библиотек перед запуском
+buildCommand = "npm install express socket.io sqlite3 peer"
+
+[deploy]
+# Та самая старт-команда!
+startCommand = "node server.js"
+# Если сервер вдруг упадет, Railway автоматически его перезапустит
+restartPolicyType = "ON_FAILURE"
