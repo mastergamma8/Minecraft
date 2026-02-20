@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MC Bedrock Voice (Anti-DPI)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root {
+            --mc-bg: #4d4d4d; --mc-panel: #c6c6c6; --mc-border-light: #ffffff;
+            --mc-border-dark: #555555; --mc-text: #333333; --mc-button: #737373;
+            --mc-button-active: #3e6b35;
+        }
+        body {
+            background-color: var(--mc-bg);
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjNGRkNDRkIi8+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiBmaWxsPSIjNGE0YTRhIi8+PHJlY3QgeD0iMzIiIHk9IjMyIiB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIGZpbGw9IiM0YTRhNGEiLz48L3N2Zz4=');
+            color: white; font-family: 'Press Start 2P', monospace;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0; padding: 10px; box-sizing: border-box;
+        }
+        .container {
+            background-color: var(--mc-panel); color: var(--mc-text); padding: 20px;
+            border-top: 6px solid var(--mc-border-light); border-left: 6px solid var(--mc-border-light);
+            border-bottom: 6px solid var(--mc-border-dark); border-right: 6px solid var(--mc-border-dark);
+            max-width: 500px; width: 100%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h1 { font-size: 14px; text-shadow: 2px 2px 0px #888; margin-bottom: 15px; color: #2b2b2b; }
+        .panel {
+            background-color: #8b8b8b; padding: 15px; margin-bottom: 15px;
+            border-top: 4px solid var(--mc-border-dark); border-left: 4px solid var(--mc-border-dark);
+            border-bottom: 4px solid var(--mc-border-light); border-right: 4px solid var(--mc-border-light);
+        }
+        input {
+            width: 90%; padding: 12px; margin-bottom: 10px; background: #000; color: #fff;
+            border: 4px solid #a0a0a0; font-family: 'Press Start 2P', monospace; font-size: 10px;
+            outline: none; text-align: center; box-sizing: border-box;
+        }
+        button {
+            background-color: var(--mc-button); color: white; font-family: 'Press Start 2P', monospace;
+            font-size: 10px; padding: 12px 10px; border-top: 4px solid var(--mc-border-light);
+            border-left: 4px solid var(--mc-border-light); border-bottom: 4px solid var(--mc-border-dark);
+            border-right: 4px solid var(--mc-border-dark); cursor: pointer; width: 100%; margin-bottom: 10px;
+        }
+        button:active {
+            border-top: 4px solid var(--mc-border-dark); border-left: 4px solid var(--mc-border-dark);
+            border-bottom: 4px solid var(--mc-border-light); border-right: 4px solid var(--mc-border-light);
+        }
+        .btn-green { background-color: #3b8526; } .btn-red { background-color: #a83232; }
+        .hidden { display: none; }
+        #status {
+            font-size: 9px; color: #ffaa00; margin-bottom: 15px; min-height: 25px;
+            line-height: 1.4; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 4px;
+        }
+        .player-list { text-align: left; font-size: 10px; margin-top: 15px; background: rgba(0,0,0,0.1); padding: 10px; }
+        .player-item { margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; }
+        .player-item::before { content: "• "; color: #3b8526; margin-right: 5px; font-size: 16px; }
+        .player-name { font-weight: bold; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mute-badge { background-color: #a83232; color: white; font-size: 7px; padding: 2px 4px; border-radius: 2px; margin-left: 5px; animation: blink 2s infinite;}
+        #event-log { background: #1e1e1e; color: #ccc; height: 70px; overflow-y: auto; font-size: 8px; text-align: left; padding: 8px; margin-top: 15px; border: 2px solid #555; line-height: 1.6; }
+        .log-time { color: #888; margin-right: 5px; } .log-join { color: #55ff55; } .log-leave { color: #ff5555; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        #audio-container { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voice Chat (Anti-DPI)</h1>
+        <div id="status">Загрузка защищенной сессии...</div>
+
+        <div id="setup-screen" class="hidden">
+            <div class="panel">
+                <input type="text" id="nickname-input" placeholder="Твой ник (напр. Стив)" maxlength="12">
+                <button class="btn-green" onclick="createRoom()">Создать комнату</button>
+                <p style="font-size: 8px; margin: 10px 0;">-- ИЛИ ВОЙТИ В СУЩЕСТВУЮЩУЮ --</p>
+                <input type="text" id="room-id-input" placeholder="ID Комнаты">
+                <button onclick="joinRoom()">Войти</button>
+            </div>
+        </div>
+
+        <div id="active-screen" class="hidden">
+            <div class="panel">
+                <p style="font-size: 8px; margin-bottom: 5px;">ID этой комнаты:</p>
+                <input type="text" id="my-id-display" readonly onclick="copyRoomId()" style="cursor: pointer; color: #55ff55;">
+                <div class="player-list">
+                    <div style="font-size: 8px; color: #444; margin-bottom: 10px;">Игроки в комнате:</div>
+                    <div id="players-container"></div>
+                </div>
+                <div id="event-log"></div>
+                <div style="margin-top: 15px;">
+                    <button id="mute-btn" onclick="toggleMute()">Выкл. микрофон</button>
+                    <button class="btn-red" onclick="leaveRoom()">Покинуть комнату навсегда</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="audio-container"></div>
+
+    <script>
+        const socket = io();
+        let peer = null;
+        let myStream = null;
+        let isMuted = false;
+        
+        let mySessionId = localStorage.getItem('vc_session_id');
+        let currentRoomId = localStorage.getItem('vc_room_id');
+        let myNickname = localStorage.getItem('vc_nickname') || '';
+        
+        if (!mySessionId) {
+            mySessionId = 'sess_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('vc_session_id', mySessionId);
+        }
+
+        let playersInRoom = {}; 
+        let activeCalls = {};
+
+        const statusEl = document.getElementById('status');
+        const setupScreen = document.getElementById('setup-screen');
+        const activeScreen = document.getElementById('active-screen');
+        const playersContainer = document.getElementById('players-container');
+        const eventLog = document.getElementById('event-log');
+        const muteBtn = document.getElementById('mute-btn');
+
+        function setStatus(msg) { statusEl.innerHTML = msg; }
+        function logEvent(text, type = 'normal') {
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            let colorClass = type === 'join' ? 'log-join' : (type === 'leave' ? 'log-leave' : '');
+            eventLog.innerHTML += `<div><span class="log-time">[${time}]</span> <span class="${colorClass}">${text}</span></div>`;
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        window.onload = () => {
+            if (currentRoomId && myNickname) {
+                setStatus("Найдена сессия. Обходим блокировки...");
+                startVoiceChat(currentRoomId, myNickname);
+            } else {
+                setStatus("Введи ник и создай/войди в комнату.");
+                setupScreen.classList.remove('hidden');
+                document.getElementById('nickname-input').value = myNickname;
+            }
+        };
+
+        async function getMicrophone() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: true, noiseSuppression: true }, video: false 
+                });
+                myStream = stream;
+                return true;
+            } catch (err) {
+                setStatus("<span style='color:red;'>Дай разрешение на микрофон в браузере!</span>");
+                return false;
+            }
+        }
+
+        function createRoom() {
+            const room = 'mc-' + Math.random().toString(36).substr(2, 5);
+            const nick = document.getElementById('nickname-input').value.trim() || 'Стив';
+            startVoiceChat(room, nick);
+        }
+
+        function joinRoom() {
+            const room = document.getElementById('room-id-input').value.trim();
+            const nick = document.getElementById('nickname-input').value.trim() || 'Стив';
+            if (!room) return setStatus("Введи ID комнаты!");
+            startVoiceChat(room, nick);
+        }
+
+        async function startVoiceChat(roomId, nickname) {
+            setStatus("Настройка звука...");
+            if (!(await getMicrophone())) return;
+
+            localStorage.setItem('vc_room_id', roomId);
+            localStorage.setItem('vc_nickname', nickname);
+            currentRoomId = roomId;
+            myNickname = nickname;
+
+            setupScreen.classList.add('hidden');
+            activeScreen.classList.remove('hidden');
+            document.getElementById('my-id-display').value = roomId;
+
+            setStatus("Подключение к приватному серверу...");
+            
+            const myPeerId = 'p-' + mySessionId; 
+            
+            // --- АНТИ-БЛОК: НАСТРОЙКИ PEERJS ---
+            // 1. Подключаемся к НАШЕМУ серверу (указан путь /peerjs), а не к публичному
+            // 2. Используем массив мощных российских и международных STUN серверов
+            peer = new Peer(myPeerId, {
+                host: window.location.hostname,
+                port: window.location.port || (window.location.protocol === 'https:' ? 443 : 80),
+                path: '/peerjs',
+                secure: window.location.protocol === 'https:',
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.yandex.ru:3478' },      // Яндекс (Работает в РФ на 100%)
+                        { urls: 'stun:stun.mail.ru:3478' },        // VK/Mail.ru
+                        { urls: 'stun:stun.sipnet.ru:3478' },      // Российский VoIP провайдер
+                        { urls: 'stun:stun.l.google.com:19302' },  // Зарубежный резерв
+                        { urls: 'stun:stun.cloudflare.com:3478' }
+                    ]
+                }
+            });
+
+            peer.on('open', (peerId) => {
+                setStatus("<span style='color:#55ff55'>Защищенное соединение установлено!</span>");
+                logEvent(`Вы зашли в комнату ${roomId}`, 'join');
+                socket.emit('join_room', { sessionId: mySessionId, roomId: currentRoomId, peerId: peerId, nickname: myNickname });
+            });
+
+            peer.on('call', (call) => {
+                call.answer(myStream);
+                handleAudioStream(call);
+            });
+            
+            peer.on('error', (err) => {
+                console.error("PeerJS Error:", err);
+                if(err.type === 'network') {
+                    setStatus("<span style='color:red;'>Ошибка сети. Проверьте HTTPS настройки сервера.</span>");
+                }
+            });
+        }
+
+        socket.on('room_state', (users) => {
+            playersInRoom = {};
+            users.forEach(u => {
+                if (u.session_id !== mySessionId) {
+                    playersInRoom[u.session_id] = u;
+                    const call = peer.call(u.peer_id, myStream);
+                    handleAudioStream(call);
+                }
+            });
+            updateUI();
+        });
+
+        socket.on('user_joined', (user) => {
+            logEvent(`Игрок ${user.nickname} зашел в комнату`, 'join');
+            playersInRoom[user.sessionId] = user;
+            updateUI();
+        });
+
+        socket.on('user_left', (user) => {
+            if (playersInRoom[user.sessionId]) {
+                logEvent(`Игрок ${playersInRoom[user.sessionId].nickname} вышел`, 'leave');
+                removePlayer(user.sessionId);
+            }
+        });
+
+        socket.on('user_disconnected', (user) => {
+            if (playersInRoom[user.sessionId]) {
+                logEvent(`Игрок ${playersInRoom[user.sessionId].nickname} потерял соединение`, 'leave');
+                removePlayer(user.sessionId);
+            }
+        });
+
+        socket.on('user_muted', (data) => {
+            if (playersInRoom[data.sessionId]) {
+                playersInRoom[data.sessionId].is_muted = data.isMuted ? 1 : 0;
+                updateUI();
+            }
+        });
+
+        function handleAudioStream(call) {
+            call.on('stream', (remoteStream) => {
+                if (document.getElementById('audio-' + call.peer)) return;
+                const audioEl = document.createElement('audio');
+                audioEl.id = 'audio-' + call.peer;
+                audioEl.srcObject = remoteStream;
+                audioEl.autoplay = true;
+                document.getElementById('audio-container').appendChild(audioEl);
+            });
+            activeCalls[call.peer] = call;
+        }
+
+        function removePlayer(sessionId) {
+            const peerId = playersInRoom[sessionId]?.peer_id;
+            delete playersInRoom[sessionId];
+            
+            if (peerId) {
+                if (activeCalls[peerId]) { activeCalls[peerId].close(); delete activeCalls[peerId]; }
+                const audioEl = document.getElementById('audio-' + peerId);
+                if (audioEl) audioEl.remove();
+            }
+            updateUI();
+        }
+
+        function updateUI() {
+            playersContainer.innerHTML = `<div class="player-item"><span class="player-name">${myNickname} (Ты)</span>${isMuted ? '<span class="mute-badge">ВЫКЛ</span>' : ''}</div>`;
+            Object.values(playersInRoom).forEach(p => {
+                playersContainer.innerHTML += `<div class="player-item"><span class="player-name">${p.nickname}</span>${p.is_muted ? '<span class="mute-badge">ВЫКЛ</span>' : ''}</div>`;
+            });
+        }
+
+        function toggleMute() {
+            if (!myStream) return;
+            isMuted = !isMuted;
+            myStream.getAudioTracks()[0].enabled = !isMuted;
+            muteBtn.innerText = isMuted ? "Вкл. микрофон" : "Выкл. микрофон";
+            if(isMuted) muteBtn.classList.add('btn-red'); else muteBtn.classList.remove('btn-red');
+            updateUI();
+            socket.emit('toggle_mute', isMuted);
+        }
+
+        function copyRoomId() {
+            document.getElementById('my-id-display').select();
+            document.execCommand('copy');
+            const old = statusEl.innerHTML;
+            setStatus("<span style='color:#55ff55'>ID комнаты скопирован!</span>");
+            setTimeout(() => setStatus(old), 2000);
+        }
+
+        function leaveRoom() {
+            localStorage.removeItem('vc_room_id');
+            socket.emit('leave_room');
+            if (peer) peer.destroy();
+            if (myStream) myStream.getTracks().forEach(t => t.stop());
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>
+
+
