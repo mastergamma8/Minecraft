@@ -84,8 +84,8 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+const PORT = process.env.PORT || 8080; // Изменили 3000 на 8080
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Анти-РКН Сервер запущен на порту ${PORT}`);
     console.log(`🔗 Сигнальный сервер WebRTC доступен по пути /peerjs`);
 });
